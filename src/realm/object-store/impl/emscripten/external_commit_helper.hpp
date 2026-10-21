@@ -16,6 +16,8 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
+#include <optional>
+
 namespace realm {
 struct RealmConfig;
 
@@ -25,12 +27,17 @@ class RealmCoordinator;
 class ExternalCommitHelper {
 public:
     ExternalCommitHelper(RealmCoordinator& parent, const RealmConfig&);
-    ~ExternalCommitHelper() = default;
+    ~ExternalCommitHelper();
 
     void notify_others();
 
 private:
     RealmCoordinator& m_parent;
+
+    // The pending timeout which will notify the coordinator of changes, if any.
+    std::optional<int> m_timeout;
+
+    static void timeout_callback(void* user_data);
 };
 
 } // namespace _impl

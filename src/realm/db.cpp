@@ -1522,13 +1522,18 @@ void DB::set_logger(const std::shared_ptr<util::Logger>& logger) noexcept
         m_logger = std::make_shared<DBLogger>(logger, m_log_id);
 }
 
-void DB::open(Replication& repl, const DBOptions& options)
+void DB::open(Replication& repl, const DBOptions& options, BinaryData initial_data)
 {
     REALM_ASSERT(!is_attached());
     repl.initialize(*this); // Throws
     set_replication(&repl);
 
-    m_alloc.init_in_memory_buffer();
+    ref_type top_ref = 0;
+
+    if (initial_data.size())
+        top_ref = m_alloc.init_in_memory_buffer(initial_data.data(), initial_data.size()); // Throws
+    else
+        m_alloc.init_in_memory_buffer();
 
     set_logger(options.logger);
     m_replication->set_logger(m_logger.get());
@@ -1549,7 +1554,7 @@ void DB::open(Replication& repl, const DBOptions& options)
     info->file_format_version = target_file_format_version;
     info->number_of_versions = 1;
     info->latest_version_number = 1;
-    info->init_versioning(0, m_alloc.get_baseline(), 1);
+    info->init_versioning(top_ref, m_alloc.get_baseline(), 1);
     ++info->num_participants;
 
     m_version_manager = std::make_unique<InMemoryVersionManager>(info, m_versionlist_mutex);
@@ -2823,6 +2828,17 @@ DBRef DB::create_in_memory(std::unique_ptr<Replication> repl, const std::string&
                            const DBOptions& options) NO_THREAD_SAFETY_ANALYSIS
 {
     DBRef db = create(std::move(repl), options);
+    db->m_db_path = in_memory_path;
+    return db;
+}
+
+DBRef DB::create_in_memory(std::unique_ptr<Replication> repl, const std::string& in_memory_path,
+                           BinaryData initial_data, const DBOptions& options) NO_THREAD_SAFETY_ANALYSIS
+{
+    REALM_ASSERT(repl);
+    DBRef db = std::make_shared<DB>(Private(), options);
+    db->m_history = std::move(repl);
+    db->open(*db->m_history, options, initial_data);
     db->m_db_path = in_memory_path;
     return db;
 }

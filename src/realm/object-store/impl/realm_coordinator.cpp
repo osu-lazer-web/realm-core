@@ -39,8 +39,36 @@
 #include <algorithm>
 #include <unordered_map>
 
+#ifdef __EMSCRIPTEN__
+#include <realm/util/file.hpp>
+#endif
+
 using namespace realm;
 using namespace realm::_impl;
+
+#ifdef __EMSCRIPTEN__
+namespace {
+// Databases are always held in memory on Emscripten (see RealmCoordinator::open_db()), and would otherwise be empty
+// on each launch. Read the contents of any existing database file at the given path to initialise the database with.
+std::unique_ptr<char[]> read_in_memory_db_initial_data(const std::string& path, size_t& size)
+{
+    size = 0;
+
+    if (path.empty() || !util::File::exists(path))
+        return nullptr;
+
+    util::File file(path, util::File::mode_Read);
+    size = size_t(file.get_size());
+
+    if (size == 0)
+        return nullptr;
+
+    std::unique_ptr<char[]> data(new char[size]);
+    file.read(0, data.get(), size);
+    return data;
+}
+} // anonymous namespace
+#endif
 
 static auto& s_coordinator_mutex = *new std::mutex;
 static auto& s_coordinators_per_path = *new std::unordered_map<std::string, std::weak_ptr<RealmCoordinator>>;
@@ -348,7 +376,16 @@ bool RealmCoordinator::open_db()
             // Force the DB to be created in memory-only mode, ignoring the filesystem path supplied in the config.
             // This is so we can run an SDK on top without having to solve the browser persistence problem yet,
             // or teach RealmConfig and SDKs about pure in-memory realms.
-            m_db = DB::create_in_memory(std::move(history), m_config.path, options);
+            //
+            // To allow for persistence, the database is initialised with the contents of any existing database file,
+            // which the SDK may have written as a copy of the realm.
+            size_t initial_data_size = 0;
+            auto initial_data = m_config.in_memory ? nullptr : read_in_memory_db_initial_data(m_config.path, initial_data_size);
+
+            if (initial_data)
+                m_db = DB::create_in_memory(std::move(history), m_config.path, BinaryData(initial_data.get(), initial_data_size), options);
+            else
+                m_db = DB::create_in_memory(std::move(history), m_config.path, options);
 #else
             if (m_config.path.size()) {
                 m_db = DB::create(std::move(history), m_config.path, options);

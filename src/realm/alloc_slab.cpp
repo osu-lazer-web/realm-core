@@ -934,6 +934,36 @@ void SlabAlloc::init_in_memory_buffer()
     m_ref_translation_ptr = ref_translation_ptr;
 }
 
+ref_type SlabAlloc::init_in_memory_buffer(const char* data, size_t size)
+{
+    std::string path;                                     // No path
+    ref_type top_ref = validate_header(data, size, path); // Throws
+
+    m_attach_mode = attach_Heap;
+
+    const size_t section_size = size_t(1) << section_shift;
+    for (size_t start = 0; start == 0 || start < size; start += section_size) {
+        m_virtual_file_buffer.emplace_back(section_size, start);
+        memcpy(m_virtual_file_buffer.back().addr, data + start, std::min(section_size, size - start));
+    }
+
+    m_data = m_virtual_file_buffer.front().addr;
+    m_virtual_file_size = size;
+
+    // The footer of a file on streaming form is not retained once the buffer is written to,
+    // so the header must refer to the top ref directly instead.
+    Header& header = *reinterpret_cast<Header*>(m_virtual_file_buffer.front().addr);
+    header.m_top_ref[0] = top_ref;
+    header.m_top_ref[1] = 0;
+    header.m_flags = 0;
+
+    m_baseline = size;
+    m_translation_table_size = 0;
+    rebuild_translations(true, 0);
+
+    return top_ref;
+}
+
 char* SlabAlloc::translate_memory_pos(ref_type ref) const noexcept
 {
     auto idx = get_section_index(ref);

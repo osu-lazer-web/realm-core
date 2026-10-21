@@ -21,6 +21,7 @@
 #endif
 
 #include <realm/object-store/impl/external_commit_helper.hpp>
+#include <emscripten/eventloop.h>
 #include <realm/object-store/impl/realm_coordinator.hpp>
 
 using namespace realm;
@@ -31,7 +32,26 @@ ExternalCommitHelper::ExternalCommitHelper(RealmCoordinator& parent, const Realm
 {
 }
 
+ExternalCommitHelper::~ExternalCommitHelper()
+{
+    if (m_timeout) {
+        emscripten_clear_timeout(*m_timeout);
+    }
+}
+
 void ExternalCommitHelper::notify_others()
 {
-    m_parent.on_change();
+    // This is called from within a commit, where running notifiers synchronously breaks the coordinator's invariants
+    // (the notifier transaction would advance past the version being committed). Other platforms notify a background
+    // worker instead, so mirror that by deferring to the event loop.
+    if (!m_timeout) {
+        m_timeout = emscripten_set_timeout(timeout_callback, 0, this);
+    }
+}
+
+void ExternalCommitHelper::timeout_callback(void* user_data)
+{
+    auto helper = reinterpret_cast<ExternalCommitHelper*>(user_data);
+    helper->m_timeout.reset();
+    helper->m_parent.on_change();
 }

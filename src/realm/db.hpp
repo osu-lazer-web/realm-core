@@ -138,6 +138,9 @@ public:
     // SyncUser::register_session) SyncSession::path() relies on the registered `m_db->get_path`
     static DBRef create_in_memory(std::unique_ptr<Replication> repl, const std::string& file,
                                   const DBOptions& options = DBOptions());
+    // Creates an in-memory database which is initialised with the contents of an existing realm file.
+    static DBRef create_in_memory(std::unique_ptr<Replication> repl, const std::string& file, BinaryData initial_data,
+                                  const DBOptions& options = DBOptions());
 
     ~DB() noexcept;
 
@@ -545,7 +548,7 @@ private:
     void open(const std::string& file, const DBOptions& options = DBOptions()) REQUIRES(!m_mutex);
     void open(BinaryData, bool take_ownership = true) REQUIRES(!m_mutex);
     void open(Replication&, const std::string& file, const DBOptions& options = DBOptions()) REQUIRES(!m_mutex);
-    void open(Replication& repl, const DBOptions& options = DBOptions()) REQUIRES(!m_mutex);
+    void open(Replication& repl, const DBOptions& options = DBOptions(), BinaryData initial_data = {}) REQUIRES(!m_mutex);
 
     void do_open(const std::string& file, const DBOptions& options);
 

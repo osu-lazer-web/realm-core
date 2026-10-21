@@ -183,6 +183,11 @@ public:
     ref_type attach_buffer(const char* data, size_t size);
 
     void init_in_memory_buffer();
+
+    /// Initialise the in-memory buffer with the contents of an existing realm file (which may be on streaming form).
+    /// \return The top ref of the file.
+    /// \throw InvalidDatabase if the file is invalid.
+    ref_type init_in_memory_buffer(const char* data, size_t size);
     char* translate_memory_pos(ref_type ref) const noexcept;
 
     bool is_in_memory() const
